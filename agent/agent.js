@@ -1,11 +1,18 @@
+const rimraf = require('rimraf');
 const path = require('path');
 const express = require('express');
-const requestAPI = require('request');
+const requestAPI = require('request-promise-native');
 const bodyParser = require('body-parser');
 const {exec} = require('child_process');
 const config = require('./agentConfig');
+//В случае ошибки повторять запрос каждые 1000 мс
+const agentRequest = () => {
+	requestAPI(agentOptions).then(response => console.log(response)).catch(() => {
+		setTimeout(agentRequest, 1000);
+	})
+}
 
-const registerOptions = {
+const agentOptions = {
 	method: 'POST',
 	uri: config.hostServer + '/notify_agent',
 	json: true,
@@ -15,22 +22,8 @@ const registerOptions = {
 	}
 }
 
-const buildOptions = {
-	method: 'POST',
-	uri: config.hostServer + '/notify_build_result',
-	json: true
-}
-
-const agentRequestCallback = (error, response, body) => {
-	if (!error && response && response.statusCode === 200) {
-		console.log(body);
-	}
-	else {
-		console.log('error');
-	}
-}
 //Запрос на регистрацию у сервера
-requestAPI.post(registerOptions, agentRequestCallback);
+agentRequest();
 
 const app = express();
 
@@ -57,7 +50,8 @@ app.post('/build', (request, response) => {
 					const startDate = new Date();
 					exec(command, {cwd: newWorkDirectory}, (err, stdout, stderr) => {
 						const endDate = new Date();
-						buildOptions.body = {
+						agentOptions.uri = config.hostServer + '/notify_build_result';
+						agentOptions.body = {
 							build: {
 								id: id,
 								hash: hash,
@@ -74,13 +68,19 @@ app.post('/build', (request, response) => {
 							}
 						};
 						//Запрос на сохранение сборки
-						requestAPI(buildOptions, agentRequestCallback);
-					})
+						agentRequest();
+						//Очистка рабочего каталога
+						rimraf(newWorkDirectory, (err) => {
+							if (err) {
+								throw err;
+							}
+						});
+					});
 				}
 			});
 		}
 	});
-	response.send(id + ' go to build');
+	response.status(200).send(id + ' go to build');
 });
 
 app.listen(config.port);

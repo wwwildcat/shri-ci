@@ -2,18 +2,22 @@ const fs = require('fs');
 const express = require('express');
 const bodyParser = require('body-parser');
 const multer = require('multer');
-const requestAPI = require('request');
+const requestAPI = require('request-promise-native');
 const config = require('./serverConfig');
 const app = express();
 const upload = multer();
 
-const serverRequestCallback = (error, response, body) => {
-	if (!error && response.statusCode === 200) {
-		console.log(body);
-	}
-	else {
-		console.log('error')
-	}
+const serverOptions = {
+	method: 'POST',
+	json: true
+}
+
+const serverRequest = () => {
+	requestAPI(serverOptions).then(response => {
+		console.log(response);
+	}).catch((error) => {
+		console.log(error.message);
+	})
 }
 
 app.use(express.static(__dirname + '/public'));
@@ -66,12 +70,9 @@ app.post('/newBuild', upload.none(), (request, response) => {
 			console.log(agentsList);
 			response.send('Задача запущена.');
 			//Запрос на сборку
-			requestAPI({
-				method: 'POST',
-				uri: agent.host + ':' + agent.port + '/build',
-				json: true,
-				body: task
-			}, serverRequestCallback);
+			serverOptions.uri = agent.host + ':' + agent.port + '/build',
+			serverOptions.body = task;
+			serverRequest();
 		}
 		else {
 			tasksList.push(task);
@@ -88,7 +89,7 @@ app.post('/notify_agent', (request, response) => {
 	if (agentsList.length) {
 		agentsList.forEach(agent => {
 			if (agent.port === request.body.port) {
-				response.send(agent.host + ':' + agent.port + ' has been registered already');
+				response.send(agent.host + ':' + agent.port + ' has been already registered');
 			}
 		});
 	}
@@ -103,12 +104,9 @@ app.post('/notify_agent', (request, response) => {
 			agentsList.push(agent);
 			const task = tasksList.pop();
 			//Запрос на сборку
-			requestAPI({
-				method: 'POST',
-				uri: agent.host + ':' + agent.port + '/build',
-				json: true,
-				body: task
-			}, serverRequestCallback);
+			serverOptions.uri = agent.host + ':' + agent.port + '/build',
+			serverOptions.body = task;
+			serverRequest();
 			response.status(200).send(agent.host + ':' + agent.port + ' was successfully registered');
 		}
 		else {
@@ -139,7 +137,7 @@ app.post('/notify_build_result', (request, response) => {
 			fs.writeFile('./builds.json', JSON.stringify(builds), err => {
 				if (err) throw err;
 				else {
-					response.send(request.body.build.id + ' successfully saved on server');
+					response.status(200).send(request.body.build.id + ' successfully saved on server');
 				}
 			});
 		}
