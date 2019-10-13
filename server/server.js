@@ -11,13 +11,41 @@ const serverOptions = {
 	method: 'POST',
 	json: true
 }
-
-const serverRequest = () => {
+//В случае ошибки убрать отвалившегося агента из списка и передать задачу следующему
+const serverRequest = (task) => {
+	serverOptions.body = task;
 	requestAPI(serverOptions).then(response => {
 		console.log(response);
 	}).catch((error) => {
 		console.log(error.message);
-	})
+		if (error.error.code === 'ECONNRESET' || error.error.code === 'ECONNREFUSED') {
+			const errorAgentUri = serverOptions.uri;
+			const errorAgentPort = errorAgentUri.match(/(?<=:)\d{4}/)[0];
+			agentsList.forEach((agent, number) => {
+				if (agent.port === +errorAgentPort) {
+					agentsList.splice(number, 1);
+				}
+			});
+			console.log(searchFreeAgents(task));
+		}
+	 });
+}
+//Поиск свободных агентов для выполнения задачи
+const searchFreeAgents = (task) => {
+	if (agentsList.length) {
+		const freeAgents = agentsList.filter(agent => agent.status === 'free');
+		if (freeAgents.length) {
+			const agent = freeAgents.pop();
+			agent.status = 'working';
+			task.status = 'inProgress';
+			//Запрос на сборку
+			serverOptions.uri = agent.host + ':' + agent.port + '/build',
+			serverRequest(task);
+			return 'Задача запущена.';
+		}
+		else return 'Нет свободных агентов, задача поставлена в очередь. Дождитесь окончания работы одного из них или запустите нового.';
+	}
+	else return 'Нет запущенных агентов, задача поставлена в очередь. Запустите нового агента.';
 }
 
 app.use(express.static(__dirname + '/public'));
@@ -60,65 +88,38 @@ app.post('/newBuild', upload.none(), (request, response) => {
 		id: (+new Date).toString(16),
 		hash: request.body.hash,
 		command: request.body.command,
-		url: config.url
+		url: config.url,
+		status: 'wait',
 	};
-	if (agentsList.length) {
-		const freeAgents = agentsList.filter(agent => agent.status === 'free');
-		if (freeAgents.length) {
-			const agent = freeAgents.pop();
-			agent.status = 'working';
-			console.log(agentsList);
-			response.send('Задача запущена.');
-			//Запрос на сборку
-			serverOptions.uri = agent.host + ':' + agent.port + '/build',
-			serverOptions.body = task;
-			serverRequest();
-		}
-		else {
-			tasksList.push(task);
-			response.send('Нет свободных агентов, задача поставлена в очередь. Дождитесь окончания работы одного из них или запустите нового.');
-		}
-	}
-	else {
-		tasksList.push(task);
-		response.send('Нет запущенных агентов, задача поставлена в очередь. Запустите нового агента.');
-	}
+	tasksList.push(task);
+	response.send(searchFreeAgents(task));
 });
 //Регистрация нового агента
 app.post('/notify_agent', (request, response) => {
-	if (agentsList.length) {
-		agentsList.forEach(agent => {
-			if (agent.port === request.body.port) {
-				response.send(agent.host + ':' + agent.port + ' has been already registered');
-			}
-		});
+	if (agentsList.some(agent => agent.port === request.body.port)) {
+		response.send('This agent has been already registered');
 	}
 	else {
+		const agent = {
+			host: request.body.host,
+			port: request.body.port,
+			status: 'free'
+		};
+		agentsList.push(agent);
+		console.log(agent.host + ':' + agent.port + ' was successfully registered');
+		//Если в момент регистрации агента в очереди уже есть нераспределенные задания, он сразу получает одно из них
 		if (tasksList.length) {
-			console.log(tasksList);
-			const agent = {
-				host: request.body.host,
-				port: request.body.port,
-				status: 'working'
-			};
-			agentsList.push(agent);
-			const task = tasksList.pop();
-			//Запрос на сборку
-			serverOptions.uri = agent.host + ':' + agent.port + '/build',
-			serverOptions.body = task;
-			serverRequest();
-			response.status(200).send(agent.host + ':' + agent.port + ' was successfully registered');
+			const waitingTasks = tasksList.filter(task => task.status === 'wait');
+			if (waitingTasks.length) {
+				const currentTask = waitingTasks.pop();
+				currentTask.status = 'inProgress'
+				agent.status = 'working';
+				//Запрос на сборку
+				serverOptions.uri = agent.host + ':' + agent.port + '/build',
+				serverRequest(currentTask);
+			}
 		}
-		else {
-			const agent = {
-				host: request.body.host,
-				port: request.body.port,
-				status: 'free'
-			};
-			agentsList.push(agent);
-			console.log(agentsList);
-			response.status(200).send(agent.host + ':' + agent.port + ' was successfully registered');
-		}
+		response.status(200).send(agent.host + ':' + agent.port + ' was successfully registered');
 	}
 });
 //Получение от агента данных о новой сборке и их сохранение
@@ -126,7 +127,6 @@ app.post('/notify_build_result', (request, response) => {
 	agentsList.forEach(agent => {
 		if (agent.port === request.body.agent.port) {
 			agent.status = 'free';
-			console.log(agentsList);
 		}
 	})
 	fs.readFile('./builds.json', (err, data) => {
@@ -137,6 +137,11 @@ app.post('/notify_build_result', (request, response) => {
 			fs.writeFile('./builds.json', JSON.stringify(builds), err => {
 				if (err) throw err;
 				else {
+					tasksList.forEach((task, number) => {
+						if (task.id === request.body.build.id) {
+							tasksList.splice(number, 1);
+						}
+					});
 					response.status(200).send(request.body.build.id + ' successfully saved on server');
 				}
 			});
