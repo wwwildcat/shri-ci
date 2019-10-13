@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Continious integation system</title>
+</head>
+<body>
+	<form name="buildForm">
+		<div>
+			<label for="hash">Коммит для сборки</label>
+			<input name="hash">
+		</div>
+		<div>
+			<label for="command">Команда для сборки</label>
+			<input name="command">
+		</div>
+		<button type="submit">Запустить сборку</button>
+	</form>
+	<table>
+        <thead><tr><th>ID</th><th>Статус</th></tr></thead>
+        <tbody>
+        </tbody>
+	</table>
+	<script src="script.js" type="module"></script>
+</body>
+</html>
