@@ -37,38 +37,33 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 //Сборка
 app.post('/build', (request, response) => {
-	const id = request.body.id;
-	const hash = request.body.hash;
-	const command = request.body.command;
-	const url = request.body.url;
 	//Клонирование репозитория
-	exec('git clone ' + url, {cwd: config.workDirectory}, (err) => {
+	exec('git clone ' + request.body.url, {cwd: config.workDirectory}, (err) => {
 		if (err) {
 			throw err;
 		}
 		else {
-			const repoName = url.split('/').reverse()[0];
+			const repoName = request.body.url.split('/').reverse()[0];
 			const newWorkDirectory = path.join(config.workDirectory, repoName);
 			//Чекаут на нужный коммит
-			exec('git checkout ' + hash, {cwd: newWorkDirectory}, (err) => {
+			exec('git checkout ' + request.body.hash, {cwd: newWorkDirectory}, (err) => {
 				if (err) {
 					throw err;
 				}
 				else {
-					const startDate = new Date();
 					//Выполнение сборочной команды
-					exec(command, {cwd: newWorkDirectory}, (err, stdout, stderr) => {
+					exec(request.body.command, {cwd: newWorkDirectory}, (err, stdout, stderr) => {
 						const endDate = new Date();
 						agentOptions.uri = config.hostServer + '/notify_build_result';
 						agentOptions.body = {
 							build: {
-								id: id,
-								hash: hash,
-								command: command,
+								id: request.body.id,
+								hash: request.body.hash,
+								command: request.body.command,
 								exitCode: err ? err.code : 0,
 								stdout: stdout,
 								stderr: stderr,
-								startDate: startDate,
+								startDate: request.body.startDate,
 								endDate: endDate
 							},
 							agent: {
@@ -84,7 +79,7 @@ app.post('/build', (request, response) => {
 								throw err;
 							}
 						});
-						response.status(200).send(id + ' has been succesfully build');
+						response.status(200).send(request.body.id + ' has been succesfully build');
 					});
 				}
 			});
