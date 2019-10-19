@@ -15,8 +15,8 @@ const agentRequest = () => {
 		console.log(error.message);
 		agentOptions.uri = config.hostServer + '/notify_agent';
 		setTimeout(agentRequest, 1000);
-	})
-}
+	});
+};
 
 const agentOptions = {
 	method: 'POST',
@@ -26,7 +26,7 @@ const agentOptions = {
 		host: 'http://localhost',
 		port: port
 	}
-}
+};
 
 //Запрос на регистрацию у сервера
 agentRequest();
@@ -65,7 +65,7 @@ app.post('/build', (request, response) => {
 								id: id,
 								hash: hash,
 								command: command,
-								status: stderr ? 'fail' : 'success',
+								exitCode: err ? err.code : 0,
 								stdout: stdout,
 								stderr: stderr,
 								startDate: startDate,

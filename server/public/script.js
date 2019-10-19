@@ -2,7 +2,8 @@ function getBuilds(builds) {
 	builds.forEach(build => {
 		const row = document.createElement('tr');
 		const tableBody = document.querySelector('tbody');
-		row.insertAdjacentHTML('afterbegin', '<td><a href="/build/' + build.id + '">'+ build.id + '</a></td><td>' + build.status + '</td>');
+		const status = build.status ? 'fail' : 'success';
+		row.insertAdjacentHTML('afterbegin', '<td><a href="/build/' + build.id + '">'+ build.id + '</a></td><td>' + status + '</td>');
 		tableBody.append(row);
 	});
 }
@@ -16,4 +17,4 @@ form.onsubmit = async (event) => {
 		method: 'POST',
 		body: new FormData(form)
 	}).then(response => response.text()).then(text => alert(text));
-}
+};
